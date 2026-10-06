@@ -72,5 +72,6 @@ A diferencia de Ethernet por cable que usa **CSMA/CD** (Detección de Colisiones
 
 ## 4. Próximos Pasos (Roadmap)
 - [ ] Pruebas empíricas con los 3 nodos operando y colisionando simultáneamente.
-- [ ] Implementar la red auxiliar de medición I2C para extraer métricas exactas.
+- [ ] Terminar de definir las variables a las cuales queremos realizarle mediciones.
+- [ ] Utilizar la tasa de error/bits como eje principal de las pruebas, medir estas variables y realizar ajustes en base a los resultados.
 - [ ] Crear una interfaz web alojada en el ESP32 para monitorear las colisiones y el rendimiento de la red en tiempo real.
