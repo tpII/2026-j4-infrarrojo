@@ -75,3 +75,31 @@ A diferencia de Ethernet por cable que usa **CSMA/CD** (Detección de Colisiones
 - [ ] Terminar de definir las variables a las cuales queremos realizarle mediciones.
 - [ ] Utilizar la tasa de error/bits como eje principal de las pruebas, medir estas variables y realizar ajustes en base a los resultados.
 - [ ] Crear una interfaz web alojada en el ESP32 para monitorear las colisiones y el rendimiento de la red en tiempo real.
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------
+## Registro de Desarrollo y Dificultades
+
+**19/09/2026 - Colisiones en la compilación y reasignación de pines**
+Empezamos a portar la librería `IRremote` (versión 4.x). Al ser *header-only*, el compilador tira errores de múltiple definición en el linker. Encapsulamos `IRremote.hpp` dentro de `IREthernet.cpp` y expusimos solo la API pura en C++.
+Tuvimos que mover el emisor IR en los Arduino al pin D3 nativo, porque el hardware PWM del Timer2 está ruteado ahí obligatoriamente y no funcionaba en el D11 como queríamos.
+
+**22/09/2026 - Saturación óptica y el "Eco" fantasma**
+Pruebas iniciales de transmisión fallidas. El receptor VS1838B se satura con las ráfagas IR. Tuvimos que agregar un gap artificial de 100 ms entre paquetes NEC y subir el SIFS a 120 ms para darle tiempo al AGC a estabilizarse.
+Además, nos dimos cuenta de que cada nodo se estaba escuchando a sí mismo (half-duplex). El ESP32 leía su propio eco de transmisión. Solución rústica pero funcional: clavar un `IrReceiver.stop()` antes de emitir, y un `resume()` con un delay de 20 ms post-transmisión para limpiar la basura óptica.
+
+**25/09/2026 - Descarte del monitoreo WiFi (Error de viabilidad)**
+Fracaso en la implementación de la red secundaria out-of-band por WiFi que habíamos propuesto para medir colisiones. Los Arduinos obviamente no tienen WiFi, y al intentar usar la baliza física en el ESP32, manejar el stack de red de Expressif y el periférico RMT del infrarrojo al mismo tiempo rompía los timings críticos de microsegundos. Descartamos el módulo de sincronización WiFi por incompatibilidad de hardware. Ahora todos los nodos se conectan por USB a una misma PC para correr benchmarks por consola serie.
+
+**02/10/2026 - Pérdida de paquetes en Broadcast**
+Implementamos el CSMA/CA con reintentos para Unicast (hasta 5 intentos si no llega el ACK en 2000 ms). Sin embargo, la función de Broadcast (dirección `0xF`) es un desastre. La consola siempre dice "Broadcast enviado OK", pero los nodos no reciben nada. 
+Análisis del error: El emisor no espera ACK en broadcast, por lo que asume éxito automático. Si un nodo receptor justo está en medio de un `isMediumBusy()` censando el canal, o transmitiendo (con el receptor apagado), se pierde el frame entero y no hay retransmisión que lo salve. A esto se suma que los emisores IR son muy direccionales; dependemos de los rebotes en el techo, y si el ángulo es malo, el paquete muere en el aire.
+
+**08/10/2026 - Bug crítico: "Fragmentos Huérfanos"**
+Estuvimos probando enviar cadenas de texto largas que se fragmentan en payloads de 7 bytes. Apareció un error grave de lógica en la capa de aplicación: usamos un único buffer global `rxMsgBuffer` que solo se limpia al recibir el flag `APP_FRAG_END`. 
+Si un emisor se queda sin reintentos a mitad de un mensaje, o si se pierden los ACKs y el emisor aborta, el receptor nunca recibe el `END`. El buffer queda abierto con fragmentos basura (huérfanos). Cuando llega un mensaje nuevo de cualquier nodo, se concatena al final de la basura anterior, generando textos corruptos ilegibles. Temporalmente está sin resolver; hay que implementar IDs de mensaje en el header o purgar el buffer por timeout.
+
+**11/10/2026 - Estado de la Prueba de Concepto**
+Se entregó el Informe de Avance. El sistema valida la integridad de tramas con CRC-16 y corre bajo un esquema básico. Queda pendiente medir empíricamente la Tasa de Error de Paquete frente a distintas cargas e implementar las correcciones del buffer de fragmentos.
+
+***
