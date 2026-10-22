@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+
+
+# Este script se uso haciendo pruebas solo con los arduinos, puede que falle, ademas, las variables de donde está cada puerpo pueden cambiar según la sesión. editar según sea necesarip
 set -e
 
 PORT_A="/dev/cu.usbmodem112101"
